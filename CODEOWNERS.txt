@@ -1,0 +1,4 @@
+# Changes to the test suite or CI gating itself require the automation
+# engineer's review -- this is what stops the gate from being quietly weakened.
+/tests/ @aryarajasekharanar-glitch
+/.github/workflows/ @aryarajasekharanar-glitch

@@ -1,0 +1,14 @@
+{
+  "name": "conduit-tester-repo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Central test suite for the Conduit app (frontend + backend), maintained independently and used to gate PRs in both repos.",
+  "scripts": {
+    "test:api": "playwright test tests/api",
+    "test:e2e": "playwright test tests/e2e",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
+  }
+}

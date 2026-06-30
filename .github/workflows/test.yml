@@ -1,0 +1,120 @@
+name: Tester Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      backend_ref:
+        description: 'Backend repo ref to test against'
+        required: false
+        default: 'master'
+      frontend_ref:
+        description: 'Frontend repo ref to test against'
+        required: false
+        default: 'master'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: conduit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/conduit
+      BACKEND_URL: http://localhost:3000/api
+      FRONTEND_URL: http://localhost:4100
+
+    steps:
+      - name: Checkout tester repo
+        uses: actions/checkout@v4
+
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          repository: gothinkster/node-express-realworld-example-app
+          ref: ${{ github.event.inputs.backend_ref || 'master' }}
+          path: backend
+
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+        with:
+          repository: gothinkster/react-redux-realworld-example-app
+          ref: ${{ github.event.inputs.frontend_ref || 'master' }}
+          path: frontend
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm install
+
+      - name: Run backend migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Seed backend
+        working-directory: backend
+        run: npx prisma db seed
+        continue-on-error: true
+
+      - name: Start backend
+        working-directory: backend
+        run: npm start &
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm install
+
+      - name: Point frontend at local backend
+        working-directory: frontend
+        run: sed -i "s|https://conduit.productionready.io/api|http://localhost:3000/api|" src/agent.js
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Serve frontend
+        working-directory: frontend
+        run: npx serve -s build -l 4100 &
+
+      - name: Wait for backend
+        run: npx wait-on http://localhost:3000/api/articles --timeout 60000
+
+      - name: Wait for frontend
+        run: npx wait-on http://localhost:4100 --timeout 60000
+
+      - name: Install tester repo deps
+        run: npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run API tests
+        run: npm run test:api
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
